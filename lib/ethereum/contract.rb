@@ -197,7 +197,7 @@ module Ethereum
               payload << formatter.to_payload(arg)
             end
             payload = payload.join()
-            txid = connection.send_transaction({to: self.address, from: self.sender, data: payload, gas: "%#x" % self.gas})["result"]
+            txid = connection.eth_send_transaction({to: self.address, from: self.sender, data: payload, gas: "%#x" % self.gas})["result"]
             return Ethereum::Transaction.new(txid, self.connection, payload, args)
           end
 

@@ -11,7 +11,7 @@ module Ethereum
       @events = []
       @constructor_inputs = @abi.detect {|x| x["type"] == "constructor"}["inputs"] rescue nil
       @abi.select {|x| x["type"] == "function" }.each do |abifun|
-        @functions << Ethereum::Function.new(abifun) 
+        @functions << Ethereum::Function.new(abifun)
       end
       @abi.select {|x| x["type"] == "event" }.each do |abievt|
         @events << Ethereum::ContractEvent.new(abievt)
@@ -66,7 +66,7 @@ module Ethereum
         end
 
         define_method :at do |addr|
-          instance_variable_set("@address", addr) 
+          instance_variable_set("@address", addr)
           self.events.each do |event|
             event.set_address(addr)
             event.set_client(connection)
@@ -82,7 +82,7 @@ module Ethereum
         end
 
         define_method :sender do
-          instance_variable_get("@sender") || connection.coinbase["result"]
+          instance_variable_get("@sender") || connection.eth_coinbase["result"]
         end
 
         define_method :set_gas_price do |gp|
@@ -90,15 +90,15 @@ module Ethereum
         end
 
         define_method :gas_price do
-          instance_variable_get("@gas_price") || 60000000000
+          instance_variable_get("@gas_price") || 20000000000
         end
 
         define_method :set_gas do |gas|
           instance_variable_set("@gas", gas)
         end
 
-        define_method :gas do 
-          instance_variable_get("@gas") || 3000000
+        define_method :gas do
+          instance_variable_get("@gas") || 250000
         end
 
         events.each do |evt|
@@ -106,40 +106,40 @@ module Ethereum
             params[:to_block] ||= "latest"
             params[:from_block] ||= "0x0"
             params[:address] ||=  instance_variable_get("@address")
-            params[:topics] = evt.signature
+            params[:topics] = "0x" + evt.signature
             payload = {topics: [params[:topics]], fromBlock: params[:from_block], toBlock: params[:to_block], address: params[:address]}
-            filter_id = connection.new_filter(payload)
+            filter_id = connection.eth_new_filter(payload)
             return filter_id["result"]
           end
 
           define_method "gfl_#{evt.name.underscore}".to_sym do |filter_id|
             formatter = Ethereum::Formatter.new
-            logs = connection.get_filter_logs(filter_id)
+            logs = connection.eth_get_filter_logs(filter_id)
             collection = []
             logs["result"].each do |result|
               inputs = evt.input_types
               outputs = inputs.zip(result["topics"][1..-1])
-              data = {blockNumber: result["blockNumber"].hex, transactionHash: result["transactionHash"], blockHash: result["blockHash"], transactionIndex: result["transactionIndex"].hex, topics: []} 
+              data = {blockNumber: result["blockNumber"].hex, transactionHash: result["transactionHash"], blockHash: result["blockHash"], transactionIndex: result["transactionIndex"].hex, topics: [], data: formatter.to_int(result['data'])}
               outputs.each do |output|
                 data[:topics] << formatter.from_payload(output)
               end
-              collection << data 
+              collection << data
             end
             return collection
           end
 
           define_method "gfc_#{evt.name.underscore}".to_sym do |filter_id|
             formatter = Ethereum::Formatter.new
-            logs = connection.get_filter_changes(filter_id)
+            logs = connection.eth_get_filter_changes(filter_id)
             collection = []
             logs["result"].each do |result|
               inputs = evt.input_types
               outputs = inputs.zip(result["topics"][1..-1])
-              data = {blockNumber: result["blockNumber"].hex, transactionHash: result["transactionHash"], blockHash: result["blockHash"], transactionIndex: result["transactionIndex"].hex, topics: []} 
+              data = {blockNumber: result["blockNumber"].hex, transactionHash: result["transactionHash"], blockHash: result["blockHash"], transactionIndex: result["transactionIndex"].hex, topics: [], data: formatter.to_int(result['data'])}
               outputs.each do |output|
                 data[:topics] << formatter.from_payload(output)
               end
-              collection << data 
+              collection << data
             end
             return collection
           end
@@ -164,23 +164,24 @@ module Ethereum
             arg_types = fun.inputs.collect(&:type)
             connection = self.connection
             return {result: :error, message: "missing parameters for #{fun.function_string}" } if arg_types.length != args.length
-            payload = []
+            payload = ["0x"]
             payload << fun.signature
             arg_types.zip(args).each do |arg|
               payload << formatter.to_payload(arg)
             end
-            raw_result = connection.call({to: self.address, from: self.sender, data: payload.join()})["result"]
+            payload = payload.join()
+            raw_result = connection.eth_call({to: self.address, from: self.sender, data: payload})["result"]
             formatted_result = fun.outputs.collect {|x| x.type }.zip(raw_result.gsub(/^0x/,'').scan(/.{64}/))
             output = formatted_result.collect {|x| formatter.from_payload(x) }
-            return {data: "0x" + payload.join(), raw: raw_result, formatted: output}
+            return {data: payload, raw: raw_result, formatted: output}
           end
 
           define_method call_function_name do |*args|
             data = self.send(call_raw_function_name, *args)
             output = data[:formatted]
-            if output.length == 1 
+            if output.length == 1
               return output[0]
-            else 
+            else
               return output
             end
           end
@@ -190,13 +191,14 @@ module Ethereum
             arg_types = fun.inputs.collect(&:type)
             connection = self.connection
             return {result: :error, message: "missing parameters for #{fun.function_string}" } if arg_types.length != args.length
-            payload = []
+            payload = ["0x"]
             payload << fun.signature
             arg_types.zip(args).each do |arg|
               payload << formatter.to_payload(arg)
             end
-            txid = connection.send_transaction({to: self.address, from: self.sender, data: "0x" + payload.join(), gas: self.gas, gasPrice: self.gas_price})["result"]
-            return Ethereum::Transaction.new(txid, self.connection, payload.join(), args)
+            payload = payload.join()
+            txid = connection.send_transaction({to: self.address, from: self.sender, data: payload, gas: "%#x" % self.gas})["result"]
+            return Ethereum::Transaction.new(txid, self.connection, payload, args)
           end
 
           define_method transact_and_wait_function_name do |*args|

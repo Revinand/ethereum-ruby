@@ -150,16 +150,21 @@ module Ethereum
 
           fun_count = functions.select {|x| x.name == fun.name }.count
           derived_function_name = (fun_count == 1) ? "#{fun.name.underscore}" : "#{fun.name.underscore}__#{fun.inputs.collect {|x| x.type}.join("__")}"
+          payload_function_name = "payload_#{derived_function_name}".to_sym
+          call_raw_rpc_function_name = "call_raw_rpc_#{derived_function_name}".to_sym
+          call_raw_rpc_function_name_alias = "cr_rpc_#{derived_function_name}".to_sym
           call_function_name = "call_#{derived_function_name}".to_sym
           call_function_name_alias = "c_#{derived_function_name}".to_sym
           call_raw_function_name = "call_raw_#{derived_function_name}".to_sym
           call_raw_function_name_alias = "cr_#{derived_function_name}".to_sym
+          transact_rpc_function_name = "transact_rpc_#{derived_function_name}".to_sym
+          transact_rpc_function_name_alias = "t_rpc_#{derived_function_name}".to_sym
           transact_function_name = "transact_#{derived_function_name}".to_sym
           transact_function_name_alias = "t_#{derived_function_name}".to_sym
           transact_and_wait_function_name = "transact_and_wait_#{derived_function_name}".to_sym
           transact_and_wait_function_name_alias = "tw_#{derived_function_name}".to_sym
 
-          define_method call_raw_function_name do |*args|
+          define_method payload_function_name do |*args|
             formatter = Ethereum::Formatter.new
             arg_types = fun.inputs.collect(&:type)
             connection = self.connection
@@ -169,8 +174,17 @@ module Ethereum
             arg_types.zip(args).each do |arg|
               payload << formatter.to_payload(arg)
             end
-            payload = payload.join()
-            raw_result = connection.eth_call({to: self.address, from: self.sender, data: payload})["result"]
+            return payload.join()
+          end
+
+          define_method call_raw_rpc_function_name do |*args|
+            payload = self.send(payload_function_name, *args)
+            return connection.eth_call({to: self.address, from: self.sender, data: payload})
+          end
+
+          define_method call_raw_function_name do |*args|
+            data = self.send(call_raw_rpc_function_name, *args)
+            raw_result = data["result"]
             formatted_result = fun.outputs.collect {|x| x.type }.zip(raw_result.gsub(/^0x/,'').scan(/.{64}/))
             output = formatted_result.collect {|x| formatter.from_payload(x) }
             return {data: payload, raw: raw_result, formatted: output}
@@ -186,30 +200,27 @@ module Ethereum
             end
           end
 
+          define_method transact_rpc_function_name do |*args|
+            payload = self.send(payload_function_name, *args)
+            return connection.eth_send_transaction({to: self.address, from: self.sender, data: payload, gas: "%#x" % self.gas})
+          end
+
           define_method transact_function_name do |*args|
-            formatter = Ethereum::Formatter.new
-            arg_types = fun.inputs.collect(&:type)
-            connection = self.connection
-            return {result: :error, message: "missing parameters for #{fun.function_string}" } if arg_types.length != args.length
-            payload = ["0x"]
-            payload << fun.signature
-            arg_types.zip(args).each do |arg|
-              payload << formatter.to_payload(arg)
-            end
-            payload = payload.join()
-            txid = connection.eth_send_transaction({to: self.address, from: self.sender, data: payload, gas: "%#x" % self.gas})["result"]
+            data = self.send(transact_rpc_function_name, *args)
+            txid = data["result"]
             return Ethereum::Transaction.new(txid, self.connection, payload, args)
           end
 
           define_method transact_and_wait_function_name do |*args|
-            function_name = "transact_#{derived_function_name}".to_sym
-            tx = self.send(function_name, *args)
+            tx = self.send(transact_function_name, *args)
             tx.wait_for_miner
             return tx
           end
 
+          alias_method call_raw_rpc_function_name_alias, call_raw_rpc_function_name
           alias_method call_function_name_alias, call_function_name
           alias_method call_raw_function_name_alias, call_raw_function_name
+          alias_method transact_rpc_function_name_alias, transact_rpc_function_name
           alias_method transact_function_name_alias, transact_function_name
           alias_method transact_and_wait_function_name_alias, transact_and_wait_function_name
 

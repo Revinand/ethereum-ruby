@@ -204,6 +204,7 @@ module Ethereum
           end
 
           define_method call_raw_function_name do |*args|
+            formatter = Ethereum::Formatter.new
             data = self.send(call_raw_rpc_function_name, *args)
             raw_result = data["result"]
             formatted_result = fun.outputs.collect {|x| x.type }.zip(raw_result.gsub(/^0x/,'').scan(/.{64}/))

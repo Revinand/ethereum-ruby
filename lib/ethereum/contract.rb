@@ -206,6 +206,7 @@ module Ethereum
           define_method call_raw_function_name do |*args|
             formatter = Ethereum::Formatter.new
             data = self.send(call_raw_rpc_function_name, *args)
+            payload = self.send(payload_function_name, *args)
             raw_result = data["result"]
             formatted_result = fun.outputs.collect {|x| x.type }.zip(raw_result.gsub(/^0x/,'').scan(/.{64}/))
             output = formatted_result.collect {|x| formatter.from_payload(x) }
@@ -230,6 +231,7 @@ module Ethereum
           define_method transact_function_name do |*args|
             data = self.send(transact_rpc_function_name, *args)
             txid = data["result"]
+            payload = self.send(payload_function_name, *args)
             return Ethereum::Transaction.new(txid, self.connection, payload, args)
           end
 

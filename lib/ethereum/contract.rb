@@ -144,6 +144,27 @@ module Ethereum
             return collection
           end
 
+          define_method "gl_#{evt.name.underscore}".to_sym do |params = {}|
+            formatter = Ethereum::Formatter.new
+            params[:to_block] ||= "latest"
+            params[:from_block] ||= "0x0"
+            params[:address] ||=  instance_variable_get("@address")
+            params[:topics] = "0x" + evt.signature
+            payload = {topics: [params[:topics]], fromBlock: params[:from_block], toBlock: params[:to_block], address: params[:address]}
+            logs = connection.eth_get_logs(payload)
+            collection = []
+            logs["result"].each do |result|
+              inputs = evt.input_types
+              outputs = inputs.zip(result["topics"][1..-1])
+              data = {blockNumber: result["blockNumber"].hex, transactionHash: result["transactionHash"], blockHash: result["blockHash"], transactionIndex: result["transactionIndex"].hex, topics: [], data: formatter.to_int(result['data'])}
+              outputs.each do |output|
+                data[:topics] << formatter.from_payload(output)
+              end
+              collection << data
+            end
+            return collection
+          end
+
         end
 
         functions.each do |fun|

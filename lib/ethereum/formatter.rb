@@ -9,6 +9,7 @@ module Ethereum
       mwei:       1000000,
       babbage:    1000000,
       picoether:  1000000,
+      bit:        100000000,
       gwei:       1000000000,
       shannon:    1000000000,
       nanoether:  1000000000,
@@ -50,7 +51,7 @@ module Ethereum
       return nil if hexstring.nil?
       hexstring.gsub(/^0x/,'').scan(/.{2}/).collect {|x| x.hex}.pack("c*")
     end
-    
+
     def to_utf8(hexstring)
       return nil if hexstring.nil?
       hexstring.gsub(/^0x/,'').scan(/.{2}/).collect {|x| x.hex}.pack("U*").delete("\u0000")
@@ -125,7 +126,7 @@ module Ethereum
 
     def to_payload(args)
       converter = "#{self.get_base_type(args[0])}_to_payload".to_sym
-      self.send(converter, args[1]) 
+      self.send(converter, args[1])
     end
 
     def from_payload(args)

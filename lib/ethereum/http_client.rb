@@ -1,6 +1,8 @@
 require 'net/http'
 module Ethereum
   class HttpClient < Client
+    class ConnectionError < StandardError; end
+
     attr_accessor :host, :port, :uri, :ssl, :cookie
 
     def initialize(host, port, ssl = false, log = false, cookie = false)
@@ -28,14 +30,22 @@ module Ethereum
       end
       request = ::Net::HTTP::Post.new(uri, header)
       request.body = payload
-      response = http.request(request)
-      if @use_cookie
-	set_cookie_headers = response.get_fields('set-cookie')
-	if set_cookie_headers.present?
-	  @cookie = set_cookie_headers.map{|str| str.split('; ').first}.join('; ')
-	end
+      begin
+        response = http.request(request)
+      rescue EOFError, Errno::ECONNRESET, SocketError, Net::OpenTimeout => ex
+        raise ConnectionError.new("[#{ex.class}] #{ex.message}")
       end
-      return response.body
+      if response.class == Net::HTTPOK
+        if @use_cookie
+          set_cookie_headers = response.get_fields('set-cookie')
+          if set_cookie_headers.present?
+            @cookie = set_cookie_headers.map{|str| str.split('; ').first}.join('; ')
+          end
+        end
+        return response.body
+      else
+        raise ConnectionError.new("[#{response.class}] #{response.body}")
+      end
     end
 
     def send_batch(batch)

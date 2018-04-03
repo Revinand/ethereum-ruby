@@ -50,7 +50,11 @@ module Ethereum
 
     def send_batch(batch)
       result = send_single(batch.to_json)
-      result = JSON.parse(result)
+      begin
+        result = JSON.parse(result)
+      rescue JSON::ParserError => ex
+        raise Ethereum::Client::ResponseFormatError.new("[#{[ex.class]}] #{ex.message}")
+      end
 
       # Make sure the order is the same as it was when batching calls
       # See 6 Batch here http://www.jsonrpc.org/specification

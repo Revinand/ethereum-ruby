@@ -1,18 +1,17 @@
 require 'net/http'
 module Ethereum
   class HttpClient < Client
-    attr_accessor :host, :port, :uri, :ssl
-    
     class ConnectionError < StandardError; end
 
-    def initialize(host, log = false)
+    attr_accessor :host, :port, :uri, :ssl, :cookie
+
+    def initialize(host, port, ssl = false, log = false, cookie = false)
       super(log)
-      uri = URI.parse(host)
-      raise ArgumentError unless ['http', 'https'].include? uri.scheme
-      @host = uri.host
-      @port = uri.port
-      
-      @ssl = uri.scheme == 'https'
+      @host = host
+      @port = port
+      @ssl = ssl
+      @use_cookie = cookie
+      @cookie = nil
       if ssl
         @uri = URI("https://#{@host}:#{@port}")
       else
@@ -26,6 +25,9 @@ module Ethereum
         http.use_ssl = true
       end
       header = {'Content-Type' => 'application/json'}
+      if @use_cookie && @cookie.present?
+        header['Cookie'] = @cookie
+      end
       request = ::Net::HTTP::Post.new(uri, header)
       request.body = payload
       begin
@@ -56,7 +58,7 @@ module Ethereum
 
       # Make sure the order is the same as it was when batching calls
       # See 6 Batch here http://www.jsonrpc.org/specification
-      return result.sort_by! { |c| c['id'] }  
+      return result.sort_by! { |c| c['id'] }
     end
   end
 
